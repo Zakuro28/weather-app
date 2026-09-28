@@ -314,17 +314,29 @@ function mix(a: string, b: string, t: number) {
 
 export const round = (n: number) => Math.round(n)
 
+export type Clock = '12h' | '24h'
+
 // Open-Meteo returns local times without an offset; read the clock digits directly
-export function hourLabel(iso: string) {
+export function hourLabel(iso: string, clock: Clock = '12h') {
   const h = Number(iso.slice(11, 13))
+  if (clock === '24h') return `${String(h).padStart(2, '0')}:00`
   const suffix = h < 12 ? 'am' : 'pm'
   return `${h % 12 === 0 ? 12 : h % 12}${suffix}`
 }
 
-export function timeLabel(iso: string) {
+export function timeLabel(iso: string, clock: Clock = '12h') {
   const h = Number(iso.slice(11, 13))
   const m = iso.slice(14, 16)
+  if (clock === '24h') return `${String(h).padStart(2, '0')}:${m}`
   return `${h % 12 === 0 ? 12 : h % 12}:${m} ${h < 12 ? 'am' : 'pm'}`
+}
+
+/** The time right now in a place's time zone, e.g. "4:57 pm" or "16:57" */
+export function clockNow(timeZone: string, clock: Clock) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: '2-digit', hourCycle: clock === '24h' ? 'h23' : 'h12' }).formatToParts(new Date())
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? ''
+  if (clock === '24h') return `${get('hour').padStart(2, '0')}:${get('minute')}`
+  return `${get('hour')}:${get('minute')} ${get('dayPeriod').toLowerCase()}`
 }
 
 export function dayLabel(date: string, index: number) {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
-import { ChevronDown, CloudOff, MapPin, RefreshCw } from 'lucide-react'
+import { ChevronDown, Clock3, CloudOff, MapPin, RefreshCw } from 'lucide-react'
 import SkyScene, { type SceneProps } from './components/SkyScene'
 import SkyPreview, { type Preset } from './components/SkyPreview'
 import SearchPanel from './components/SearchPanel'
@@ -17,6 +17,8 @@ import {
   skyOf,
   sunProgress,
   timeLabel,
+  clockNow,
+  type Clock,
   type Forecast,
   type Place,
   type Units,
@@ -77,10 +79,59 @@ function UnitToggle({ units, onChange }: { units: Units; onChange: (u: Units) =>
   )
 }
 
+/** The place's local time, ticking; click to switch between 12- and 24-hour */
+function LiveClock({ timeZone, clock, onToggle }: { timeZone?: string; clock: Clock; onToggle: () => void }) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 1000)
+    return () => clearInterval(t)
+  }, [])
+  let now: string
+  try {
+    now = clockNow(timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone, clock)
+  } catch {
+    now = clockNow(Intl.DateTimeFormat().resolvedOptions().timeZone, clock)
+  }
+  const other = clock === '12h' ? '24-hour' : '12-hour'
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={`Local time ${now}. Switch to ${other} time`}
+      title={`Switch to ${other} time`}
+      className="group mr-auto flex h-10 items-center gap-2 rounded-full bg-black/20 pr-1.5 pl-3.5 backdrop-blur-md transition-colors hover:bg-black/30 sm:mr-0"
+    >
+      <Clock3 className="size-4 text-white/70 transition-transform duration-500 group-hover:rotate-[360deg]" aria-hidden />
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span
+          key={`${clock}-${now}`}
+          initial={{ y: 8, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -8, opacity: 0 }}
+          transition={{ duration: 0.25 }}
+          className="min-w-[4.6rem] text-center text-sm font-semibold tabular-nums"
+        >
+          {now}
+        </motion.span>
+      </AnimatePresence>
+      <span className="rounded-full bg-white/15 px-2 py-1 text-[11px] font-semibold tracking-wide text-white/80 transition-colors group-hover:bg-white group-hover:text-[#0e1628]">
+        {clock === '12h' ? '12h' : '24h'}
+      </span>
+    </button>
+  )
+}
+
 export default function App() {
   const [place, setPlace] = useState<Place>(() => load('place', MANILA))
   const [recent, setRecent] = useState<Place[]>(() => load('recent', [MANILA]))
   const [units, setUnits] = useState<Units>(() => load('units', 'metric'))
+  const [clock, setClock] = useState<Clock>(() => load('clock', '12h'))
+  const toggleClock = () =>
+    setClock((c) => {
+      const next = c === '12h' ? '24h' : '12h'
+      save('clock', next)
+      return next
+    })
   const [data, setData] = useState<Forecast | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -165,11 +216,11 @@ export default function App() {
       <SkyScene {...scene} />
 
       <div className={`mx-auto min-h-dvh max-w-6xl px-4 pt-5 pb-24 sm:px-6 sm:pt-8 ${scene.phase === 'night' ? 'is-night' : ''}`}>
-        <header className="flex items-center justify-between gap-3">
+        <header className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="group flex min-w-0 items-center gap-2.5 rounded-full py-2 pr-4 pl-3 text-left transition-colors hover:bg-white/10"
+            className="group flex min-w-0 max-w-full items-center gap-2.5 rounded-full py-2 pr-4 pl-3 text-left transition-colors hover:bg-white/10"
             aria-label={`Change location, currently ${place.name}`}
           >
             <MapPin className="size-5 shrink-0" aria-hidden />
@@ -189,7 +240,8 @@ export default function App() {
             <ChevronDown className="size-4 shrink-0 text-white/60 transition-transform group-hover:translate-y-0.5" aria-hidden />
           </button>
 
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex w-full items-center gap-2 sm:w-auto sm:shrink-0">
+            <LiveClock timeZone={data?.timezone} clock={clock} onToggle={toggleClock} />
             <button
               type="button"
               onClick={() => setReloadKey((k) => k + 1)}
@@ -219,18 +271,18 @@ export default function App() {
                 <div className="lg:sticky lg:top-10">
                   <Current data={data} unit={units === 'metric' ? 'C' : 'F'} />
                   <p className="mt-6 text-sm text-white/55">
-                    Updated {timeLabel(data.now.time)} local time
+                    Updated {timeLabel(data.now.time, clock)} local time
                     {error && <span className="block text-amber-200">Couldn’t refresh. Showing the last update.</span>}
                   </p>
                 </div>
                 <div className="space-y-4 sm:space-y-5">
-                  <Hourly hours={data.hours} placeKey={placeKey} />
+                  <Hourly hours={data.hours} placeKey={placeKey} clock={clock} />
                   <Daily days={data.days} nowTemp={data.now.temp} imperial={units === 'imperial'} placeKey={placeKey} />
                 </div>
               </div>
 
               <div className="mt-4 sm:mt-5">
-                <Details data={data} imperial={units === 'imperial'} />
+                <Details data={data} imperial={units === 'imperial'} clock={clock} />
               </div>
             </motion.div>
           )}

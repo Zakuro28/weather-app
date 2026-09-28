@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { motion } from 'motion/react'
 import { Droplets, Eye, Gauge, Sun, Sunrise, Thermometer, Umbrella, Wind, type LucideIcon } from 'lucide-react'
 import AnimatedNumber from './AnimatedNumber'
-import { compass, minutesOfDay, round, timeLabel, uvLabel, type Forecast } from '../lib/weather'
+import { compass, minutesOfDay, round, timeLabel, uvLabel, type Clock, type Forecast } from '../lib/weather'
 
 const EASE = [0.22, 1, 0.36, 1] as const
 
@@ -92,7 +92,7 @@ function UvGauge({ uv }: { uv: number }) {
   )
 }
 
-function SunArc({ now, rise, set }: { now: string; rise: string; set: string }) {
+function SunArc({ now, rise, set, clock }: { now: string; rise: string; set: string; clock: Clock }) {
   const n = minutesOfDay(now)
   const r0 = minutesOfDay(rise)
   const s0 = minutesOfDay(set)
@@ -128,11 +128,11 @@ function SunArc({ now, rise, set }: { now: string; rise: string; set: string }) 
       <div className="mt-auto flex justify-between text-sm">
         <span>
           <span className="block text-white/55">Sunrise</span>
-          {timeLabel(rise)}
+          {timeLabel(rise, clock)}
         </span>
         <span className="text-right">
           <span className="block text-white/55">Sunset</span>
-          {timeLabel(set)}
+          {timeLabel(set, clock)}
         </span>
       </div>
       <p className="sr-only">{hoursOfLight.toFixed(1)} hours of daylight</p>
@@ -140,7 +140,7 @@ function SunArc({ now, rise, set }: { now: string; rise: string; set: string }) 
   )
 }
 
-export default function Details({ data, imperial }: { data: Forecast; imperial: boolean }) {
+export default function Details({ data, imperial, clock }: { data: Forecast; imperial: boolean; clock: Clock }) {
   const { now, days } = data
   const today = days[0]
   const speedUnit = imperial ? 'mph' : 'km/h'
@@ -165,7 +165,7 @@ export default function Details({ data, imperial }: { data: Forecast; imperial: 
       </Card>
 
       <Card icon={Sunrise} title="Sun" index={1} className="col-span-2">
-        <SunArc now={now.time} rise={today.sunrise} set={today.sunset} />
+        <SunArc now={now.time} rise={today.sunrise} set={today.sunset} clock={clock} />
       </Card>
 
       <Card icon={Sun} title="UV index" index={2}>

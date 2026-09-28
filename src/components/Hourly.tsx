@@ -1,7 +1,7 @@
 import { useId, useMemo } from 'react'
 import { motion } from 'motion/react'
 import { Clock, Droplet } from 'lucide-react'
-import { hourLabel, iconOf, round, type Hour } from '../lib/weather'
+import { hourLabel, iconOf, round, type Clock as ClockFormat, type Hour } from '../lib/weather'
 
 const COL = 68
 const CHART_H = 92
@@ -25,7 +25,7 @@ function smooth(pts: [number, number][]) {
   return d
 }
 
-export default function Hourly({ hours, placeKey }: { hours: Hour[]; placeKey: string }) {
+export default function Hourly({ hours, placeKey, clock }: { hours: Hour[]; placeKey: string; clock: ClockFormat }) {
   const gid = useId().replace(/:/g, '')
   const { pts, line, area, width } = useMemo(() => {
     const temps = hours.map((h) => h.temp)
@@ -60,7 +60,7 @@ export default function Hourly({ hours, placeKey }: { hours: Hour[]; placeKey: s
                   className="flex shrink-0 flex-col items-center gap-2.5"
                   style={{ width: COL }}
                 >
-                  <span className={`text-sm ${i === 0 ? 'font-semibold text-white' : 'text-white/70'}`}>{i === 0 ? 'Now' : hourLabel(h.time)}</span>
+                  <span className={`text-sm ${i === 0 ? 'font-semibold text-white' : 'text-white/70'}`}>{i === 0 ? 'Now' : hourLabel(h.time, clock)}</span>
                   <Icon className="size-6" strokeWidth={1.6} aria-hidden />
                   <span className="sr-only">
                     {round(h.temp)} degrees{h.rainChance >= 20 ? `, ${h.rainChance}% chance of rain` : ''}
