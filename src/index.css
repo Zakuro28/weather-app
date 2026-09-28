@@ -1,0 +1,107 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Onest", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  background: #1b2a4a;
+}
+
+/* No body background: it would paint over the fixed sky scene behind it */
+body {
+  min-height: 100dvh;
+  color: white;
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+:focus-visible {
+  outline: 2px solid white;
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+
+/* Big soft serif numerals */
+.numeral {
+  font-family: var(--font-display);
+  font-variation-settings: "opsz" 144, "SOFT" 100;
+  font-weight: 250;
+  letter-spacing: -0.06em;
+  font-feature-settings: "lnum", "tnum";
+}
+
+/* Panels sit on any sky; a dark tint keeps white text readable on bright skies too */
+.panel {
+  background: rgba(8, 14, 30, 0.26);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(22px) saturate(140%);
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  border-radius: 28px;
+}
+
+.text-soft {
+  text-shadow: 0 1px 12px rgba(0, 0, 0, 0.18);
+}
+
+/* Horizontal scroller without a visible bar */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---------- Sky scene ---------- */
+.cloud {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 255, 255, var(--a, 0.55)), transparent);
+  filter: blur(18px);
+  animation: drift var(--d, 90s) linear infinite;
+  animation-delay: var(--delay, 0s);
+}
+@keyframes drift {
+  from { transform: translateX(-40vw); }
+  to { transform: translateX(140vw); }
+}
+
+.star {
+  position: absolute;
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: white;
+  animation: twinkle var(--t, 3s) ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
+}
+
+.sun-glow {
+  animation: breathe 8s ease-in-out infinite;
+}
+@keyframes breathe {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.08); opacity: 1; }
+}
+
+.flash {
+  animation: flash 7s infinite;
+}
+@keyframes flash {
+  0%, 88%, 92%, 100% { opacity: 0; }
+  89%, 91% { opacity: 0.55; }
+  90% { opacity: 0.15; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cloud, .star, .sun-glow, .flash { animation: none; }
+}
