@@ -1,8 +1,19 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import type { Kind, Phase, Sky } from '../lib/weather'
+import Lightning from './Lightning'
+import { hasLightning, type Kind, type Phase, type Sky } from '../lib/weather'
 
-type Props = { sky: Sky; kind: Kind; phase: Phase; code: number; wind: number }
+export type SceneProps = {
+  sky: Sky
+  kind: Kind
+  phase: Phase
+  code: number
+  wind: number
+  sunT: number | null // 0 sunrise → 1 sunset
+  moonT: number // 0 sunset → 1 sunrise
+  lightning: boolean
+}
+type Props = SceneProps
 
 // Seeded so stars and clouds don't jump around on every render
 function rand(seed: number) {
@@ -97,22 +108,94 @@ function Precipitation({ kind, code, wind }: { kind: Kind; code: number; wind: n
   return <canvas ref={ref} className="absolute inset-0 size-full" aria-hidden />
 }
 
-export default function SkyScene({ sky, kind, phase, code, wind }: Props) {
+const EASE = [0.22, 1, 0.36, 1] as const
+
+// Where a body sits on its arc across the sky: t=0 rising left, 0.5 overhead, 1 setting right
+function arcPosition(t: number) {
+  return { left: `${6 + t * 84}%`, top: `${64 - Math.sin(Math.PI * t) * 54}%` }
+}
+
+function SunBody({ t, color, dim }: { t: number; color: string; dim: boolean }) {
+  const pos = arcPosition(t)
+  const low = 1 - Math.sin(Math.PI * t) // 1 near the horizon
+  return (
+    <motion.div
+      className="absolute -translate-x-1/2 -translate-y-1/2"
+      initial={{ opacity: 0, ...pos, y: 60 }}
+      animate={{ opacity: dim ? 0.35 : 1, ...pos, y: 0 }}
+      exit={{ opacity: 0, y: 60 }}
+      transition={{ duration: 1.8, ease: EASE }}
+    >
+      {/* Wide atmospheric glow, warmer when low */}
+      <div
+        className="sun-glow absolute top-1/2 left-1/2 size-[80vmin] -translate-x-1/2 -translate-y-1/2 rounded-full"
+        style={{ background: `radial-gradient(circle, ${color}${dim ? '55' : 'aa'} 0%, ${color}33 25%, transparent 60%)` }}
+      />
+      {!dim && (
+        <>
+          {/* Slowly turning rays */}
+          <div
+            className="sun-rays absolute top-1/2 left-1/2 size-[110vmin] -translate-x-1/2 -translate-y-1/2 rounded-full"
+            style={{
+              background: `repeating-conic-gradient(from 0deg, ${color}${low > 0.6 ? '30' : '22'} 0deg 4deg, transparent 4deg 15deg)`,
+              maskImage: 'radial-gradient(circle, black 8%, transparent 62%)',
+              WebkitMaskImage: 'radial-gradient(circle, black 8%, transparent 62%)',
+            }}
+          />
+          {/* The disc */}
+          <div
+            className="relative size-[11vmin] min-h-16 min-w-16 rounded-full"
+            style={{ background: `radial-gradient(circle, #fffef6 0%, #fff7d6 45%, ${color} 100%)`, boxShadow: `0 0 60px 20px ${color}88, 0 0 140px 60px ${color}44` }}
+          />
+        </>
+      )}
+    </motion.div>
+  )
+}
+
+function MoonBody({ t, glow }: { t: number; glow: string }) {
+  const pos = arcPosition(t)
+  return (
+    <motion.div
+      className="absolute grid -translate-x-1/2 -translate-y-1/2 place-items-center"
+      initial={{ opacity: 0, ...pos, y: 60 }}
+      animate={{ opacity: 1, ...pos, y: 0 }}
+      exit={{ opacity: 0, y: 60 }}
+      transition={{ duration: 1.8, ease: EASE }}
+    >
+      <div className="absolute size-[42vmin] rounded-full" style={{ background: `radial-gradient(circle, ${glow}38, transparent 60%)` }} />
+      <div className="relative size-[9vmin] min-h-14 min-w-14 overflow-hidden rounded-full bg-[#f4f1e6] shadow-[0_0_40px_6px_rgba(220,225,255,0.35)]">
+        {/* Craters */}
+        <span className="absolute top-[22%] left-[28%] size-[22%] rounded-full bg-[#dcd6c3]" />
+        <span className="absolute top-[55%] left-[52%] size-[16%] rounded-full bg-[#dcd6c3]" />
+        <span className="absolute top-[38%] left-[62%] size-[10%] rounded-full bg-[#e2dcc9]" />
+        {/* Shadow side */}
+        <span className="absolute inset-0 rounded-full shadow-[inset_-14px_-8px_0_0_rgba(170,165,150,0.55)]" />
+      </div>
+    </motion.div>
+  )
+}
+
+export default function SkyScene({ sky, kind, phase, code, wind, sunT, moonT, lightning }: Props) {
   const night = phase === 'night'
-  const showSun = !night && (kind === 'clear' || kind === 'partly')
-  const showMoon = night && (kind === 'clear' || kind === 'partly')
-  const showStars = night && (kind === 'clear' || kind === 'partly')
-  const cloudCount = { clear: 1, partly: 5, cloudy: 9, fog: 6, drizzle: 7, rain: 8, snow: 7, storm: 9 }[kind]
+  const up = sunT !== null && !night
+  const brightSky = kind === 'clear' || kind === 'partly'
+  const showSun = up && (brightSky || kind === 'cloudy' || kind === 'fog' || kind === 'drizzle')
+  const showMoon = night && brightSky
+  const showStars = night && brightSky
+  const heavy = hasLightning(code)
+  const cloudCount = { clear: 1, partly: 5, cloudy: 10, fog: 6, drizzle: 9, rain: 12, snow: 8, storm: 14 }[kind]
   const wet = kind === 'rain' || kind === 'drizzle' || kind === 'storm' || kind === 'snow'
+  const rainy = kind === 'rain' || kind === 'storm' || kind === 'drizzle'
 
   const stars = useMemo(
     () =>
-      Array.from({ length: 90 }, (_, i) => ({
+      Array.from({ length: 170 }, (_, i) => ({
         left: rand(i) * 100,
-        top: rand(i + 200) * 65,
+        top: rand(i + 200) * 72,
         t: 2 + rand(i + 400) * 4,
         delay: rand(i + 600) * 4,
-        size: rand(i + 800) > 0.85 ? 3 : 2,
+        size: rand(i + 800) > 0.9 ? 3 : rand(i + 900) > 0.5 ? 2 : 1,
       })),
     [],
   )
@@ -120,16 +203,22 @@ export default function SkyScene({ sky, kind, phase, code, wind }: Props) {
   const clouds = useMemo(
     () =>
       Array.from({ length: cloudCount }, (_, i) => ({
-        top: 4 + rand(i + 11) * 48,
-        w: 260 + rand(i + 21) * 420,
-        h: 90 + rand(i + 31) * 120,
-        d: 70 + rand(i + 41) * 90,
+        top: (rainy ? -6 : 4) + rand(i + 11) * (rainy ? 40 : 48),
+        w: (rainy ? 420 : 260) + rand(i + 21) * 460,
+        h: (rainy ? 150 : 90) + rand(i + 31) * 140,
+        d: (kind === 'storm' ? 45 : 70) + rand(i + 41) * 80,
         delay: -rand(i + 51) * 160,
       })),
-    [cloudCount],
+    [cloudCount, rainy, kind],
   )
 
-  const cloudAlpha = night ? 0.18 : kind === 'cloudy' || kind === 'storm' ? 0.55 : 0.45
+  // Rain clouds are grey and heavy; fair-weather clouds are white and soft
+  const cloudTone =
+    kind === 'storm' ? (night ? '22,26,36' : '46,52,66')
+    : kind === 'rain' ? (night ? '28,34,48' : '78,88,104')
+    : kind === 'drizzle' ? (night ? '40,48,64' : '120,132,150')
+    : night ? '150,160,190' : '255,255,255'
+  const cloudAlpha = rainy ? (heavy ? 0.9 : 0.75) : night ? 0.16 : kind === 'cloudy' ? 0.55 : 0.45
 
   return (
     <div className="fixed inset-0 -z-10 overflow-hidden" aria-hidden>
@@ -153,51 +242,48 @@ export default function SkyScene({ sky, kind, phase, code, wind }: Props) {
         transition={{ duration: 1.6 }}
       />
 
-      {showStars && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 2 }} className="absolute inset-0">
-          {stars.map((s, i) => (
-            <span
-              key={i}
-              className="star"
-              style={{ left: `${s.left}%`, top: `${s.top}%`, width: s.size, height: s.size, ['--t' as string]: `${s.t}s`, ['--delay' as string]: `${s.delay}s` }}
-            />
-          ))}
-        </motion.div>
-      )}
-
       <AnimatePresence>
-        {showSun && (
-          <motion.div
-            key="sun"
-            initial={{ opacity: 0, y: 80, scale: 0.8 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 80 }}
-            transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute top-[8%] right-[10%]"
-          >
-            <div className="sun-glow size-[34vmin] rounded-full" style={{ background: `radial-gradient(circle, ${sky.glow} 0%, ${sky.glow}88 18%, transparent 62%)` }} />
-          </motion.div>
-        )}
-        {showMoon && (
-          <motion.div
-            key="moon"
-            initial={{ opacity: 0, y: 60 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 60 }}
-            transition={{ duration: 1.6, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute top-[10%] right-[12%] grid place-items-center"
-          >
-            <div className="absolute size-[30vmin] rounded-full" style={{ background: `radial-gradient(circle, ${sky.glow}40, transparent 60%)` }} />
-            <div className="relative size-[9vmin] min-h-14 min-w-14 rounded-full bg-[#f4f1e6] shadow-[inset_-10px_-6px_0_0_#d8d2bd]" />
+        {showStars && (
+          <motion.div key="stars" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 2 }} className="absolute inset-0">
+            {stars.map((s, i) => (
+              <span
+                key={i}
+                className="star"
+                style={{ left: `${s.left}%`, top: `${s.top}%`, width: s.size, height: s.size, ['--t' as string]: `${s.t}s`, ['--delay' as string]: `${s.delay}s` }}
+              />
+            ))}
+            {/* The odd shooting star */}
+            <span className="shooting-star" style={{ top: '14%', left: '22%', ['--delay' as string]: '3s' }} />
+            <span className="shooting-star" style={{ top: '26%', left: '58%', ['--delay' as string]: '11s' }} />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Clouds drift across; storms darken them */}
+      <AnimatePresence>
+        {showSun && sunT !== null && <SunBody key="sun" t={sunT} color={sky.glow} dim={!brightSky} />}
+        {showMoon && <MoonBody key="moon" t={moonT} glow={sky.glow} />}
+      </AnimatePresence>
+
+      {/* A low grey ceiling of cloud when it rains */}
+      <AnimatePresence>
+        {rainy && (
+          <motion.div
+            key="deck"
+            className="absolute inset-x-0 top-0 h-[55vh]"
+            style={{ background: `linear-gradient(180deg, rgba(${cloudTone},${heavy ? 0.95 : 0.7}) 0%, rgba(${cloudTone},0.35) 45%, transparent 100%)` }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.6 }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Clouds drift across; rain clouds are darker, bigger and faster in storms */}
       <div className="absolute inset-0">
         {clouds.map((c, i) => (
           <span
-            key={i}
+            key={`${kind}-${i}`}
             className="cloud"
             style={{
               top: `${c.top}%`,
@@ -205,7 +291,8 @@ export default function SkyScene({ sky, kind, phase, code, wind }: Props) {
               height: c.h,
               ['--d' as string]: `${c.d}s`,
               ['--delay' as string]: `${c.delay}s`,
-              ['--a' as string]: kind === 'storm' ? 0.25 : cloudAlpha,
+              ['--a' as string]: cloudAlpha,
+              ['--c' as string]: cloudTone,
             }}
           />
         ))}
@@ -215,7 +302,10 @@ export default function SkyScene({ sky, kind, phase, code, wind }: Props) {
 
       {wet && <Precipitation kind={kind === 'snow' ? 'snow' : 'rain'} code={code} wind={wind} />}
 
-      {kind === 'storm' && <div className="flash absolute inset-0 bg-white" />}
+      {lightning && <Lightning storm={kind === 'storm'} />}
+
+      {/* Night dims everything a touch more */}
+      <motion.div className="absolute inset-0 bg-[#01030a]" animate={{ opacity: night ? 0.25 : 0 }} transition={{ duration: 1.6 }} />
 
       {/* Soft vignette to anchor the content */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.25)_100%)]" />

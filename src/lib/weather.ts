@@ -253,20 +253,61 @@ export function phaseOf(nowIso: string, sunriseIso: string, sunsetIso: string): 
 
 export type Sky = { top: string; bottom: string; glow: string; key: string }
 
-export function skyOf(kind: Kind, phase: Phase): Sky {
+/** sunHeight: 0 on the horizon, 1 at noon */
+export function skyOf(kind: Kind, phase: Phase, sunHeight = 1): Sky {
   const night = phase === 'night'
   const golden = phase === 'dawn' || phase === 'dusk'
   const key = `${kind}-${phase}`
 
-  if (kind === 'storm') return night ? { top: '#07090f', bottom: '#232a3b', glow: '#6d7aa8', key } : { top: '#1c2230', bottom: '#4a5468', glow: '#9aa6c4', key }
-  if (kind === 'rain' || kind === 'drizzle')
-    return night ? { top: '#0a1220', bottom: '#2a3a52', glow: '#5c7aa3', key } : { top: '#34475f', bottom: '#7890aa', glow: '#b7c8dc', key }
+  if (kind === 'storm') return night ? { top: '#040509', bottom: '#191e2b', glow: '#6d7aa8', key } : { top: '#171c27', bottom: '#3d4658', glow: '#9aa6c4', key }
+  if (kind === 'rain')
+    return night ? { top: '#060b15', bottom: '#1c2a3e', glow: '#5c7aa3', key } : { top: '#2b3a4e', bottom: '#65788f', glow: '#b7c8dc', key }
+  if (kind === 'drizzle')
+    return night ? { top: '#0a1220', bottom: '#2a3a52', glow: '#5c7aa3', key } : { top: '#3c4f68', bottom: '#8499b1', glow: '#c9d6e6', key }
   if (kind === 'snow') return night ? { top: '#141c30', bottom: '#4a5b7a', glow: '#c6d6f0', key } : { top: '#5a7596', bottom: '#a9bdd4', glow: '#ffffff', key }
   if (kind === 'fog') return night ? { top: '#1a1f28', bottom: '#454d5a', glow: '#98a2b3', key } : { top: '#6f7c8c', bottom: '#b3bcc6', glow: '#e8edf2', key }
   if (golden) return phase === 'dawn' ? { top: '#2d3a78', bottom: '#f39c7a', glow: '#ffd29a', key } : { top: '#2a1f5c', bottom: '#f07a5a', glow: '#ffb56b', key }
-  if (night) return kind === 'clear' ? { top: '#050817', bottom: '#1d2b55', glow: '#a9b8ff', key } : { top: '#0b1022', bottom: '#2b3552', glow: '#8d9ac4', key }
+  if (night) return kind === 'clear' ? { top: '#01030a', bottom: '#131d3d', glow: '#a9b8ff', key } : { top: '#04070f', bottom: '#1d2640', glow: '#8d9ac4', key }
   if (kind === 'cloudy') return { top: '#50627a', bottom: '#98abc2', glow: '#e4ebf3', key }
-  return { top: '#2466c9', bottom: '#7fb6f0', glow: '#fff1b8', key }
+
+  // Clear daytime: warm and soft when the sun is low, deep blue and bright at noon
+  const h = Math.max(0, Math.min(1, sunHeight))
+  return {
+    top: mix('#3a6fc4', '#1a63d6', h),
+    bottom: mix('#ffcf9e', '#8ec9ff', h),
+    glow: mix('#ffd08a', '#fff6d0', h),
+    key: `${key}-${Math.round(h * 5)}`,
+  }
+}
+
+/** Is it raining hard enough (or storming) for lightning? */
+export function hasLightning(code: number) {
+  return [65, 67, 82, 95, 96, 99].includes(code)
+}
+
+/** 0 at sunrise, 1 at sunset; null when the sun is down */
+export function sunProgress(nowIso: string, sunriseIso: string, sunsetIso: string) {
+  const n = minutesOfDay(nowIso)
+  const r = minutesOfDay(sunriseIso)
+  const s = minutesOfDay(sunsetIso)
+  if (n < r || n > s) return null
+  return (n - r) / (s - r)
+}
+
+/** 0 at sunset, 1 at the next sunrise */
+export function nightProgress(nowIso: string, sunriseIso: string, sunsetIso: string) {
+  const n = minutesOfDay(nowIso)
+  const r = minutesOfDay(sunriseIso)
+  const s = minutesOfDay(sunsetIso)
+  const length = 1440 - s + r
+  const since = n > s ? n - s : n + 1440 - s
+  return Math.min(1, since / length)
+}
+
+function mix(a: string, b: string, t: number) {
+  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16))
+  const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16))
+  return `#${pa.map((v, i) => Math.round(v + (pb[i] - v) * t).toString(16).padStart(2, '0')).join('')}`
 }
 
 /* ---------- Formatting ---------- */

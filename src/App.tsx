@@ -1,13 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, MotionConfig, motion } from 'motion/react'
 import { ChevronDown, CloudOff, MapPin, RefreshCw } from 'lucide-react'
-import SkyScene from './components/SkyScene'
+import SkyScene, { type SceneProps } from './components/SkyScene'
+import SkyPreview, { type Preset } from './components/SkyPreview'
 import SearchPanel from './components/SearchPanel'
 import Current from './components/Current'
 import Hourly from './components/Hourly'
 import Daily from './components/Daily'
 import Details from './components/Details'
-import { fetchForecast, kindOf, phaseOf, skyOf, timeLabel, type Forecast, type Place, type Units } from './lib/weather'
+import {
+  fetchForecast,
+  hasLightning,
+  kindOf,
+  nightProgress,
+  phaseOf,
+  skyOf,
+  sunProgress,
+  timeLabel,
+  type Forecast,
+  type Place,
+  type Units,
+} from './lib/weather'
 
 const MANILA: Place = { name: 'Manila', region: 'Metro Manila', country: 'Philippines', latitude: 14.6042, longitude: 120.9822 }
 
@@ -123,12 +136,25 @@ export default function App() {
     save('units', u)
   }
 
-  const scene = useMemo(() => {
-    if (!data) return { sky: skyOf('clear', 'night'), kind: 'clear' as const, phase: 'night' as const, code: 0, wind: 0 }
-    const kind = kindOf(data.now.code)
-    const phase = phaseOf(data.now.time, data.days[0].sunrise, data.days[0].sunset)
-    return { sky: skyOf(kind, phase), kind, phase, code: data.now.code, wind: data.now.wind }
-  }, [data])
+  const [preview, setPreview] = useState<Preset | null>(null)
+
+  const scene = useMemo<SceneProps>(() => {
+    const build = (code: number, phase: SceneProps['phase'], sunT: number | null, moonT: number, wind: number): SceneProps => {
+      const kind = kindOf(code)
+      const height = sunT === null ? 0 : Math.sin(Math.PI * sunT)
+      return { sky: skyOf(kind, phase, height), kind, phase, code, wind, sunT, moonT, lightning: hasLightning(code) }
+    }
+    if (preview) return build(preview.code, preview.phase, preview.sunT, preview.moonT ?? 0.4, preview.wind ?? 10)
+    if (!data) return build(0, 'night', null, 0.4, 0)
+    const { sunrise, sunset } = data.days[0]
+    return build(
+      data.now.code,
+      phaseOf(data.now.time, sunrise, sunset),
+      sunProgress(data.now.time, sunrise, sunset),
+      nightProgress(data.now.time, sunrise, sunset),
+      data.now.wind,
+    )
+  }, [data, preview])
 
   useEffect(() => {
     document.querySelector('meta[name="theme-color"]')?.setAttribute('content', scene.sky.top)
@@ -138,7 +164,7 @@ export default function App() {
     <MotionConfig reducedMotion="user">
       <SkyScene {...scene} />
 
-      <div className="mx-auto min-h-dvh max-w-6xl px-4 pt-5 pb-10 sm:px-6 sm:pt-8">
+      <div className={`mx-auto min-h-dvh max-w-6xl px-4 pt-5 pb-24 sm:px-6 sm:pt-8 ${scene.phase === 'night' ? 'is-night' : ''}`}>
         <header className="flex items-center justify-between gap-3">
           <button
             type="button"
@@ -219,6 +245,7 @@ export default function App() {
         </footer>
       </div>
 
+      <SkyPreview active={preview} onChange={setPreview} />
       <SearchPanel open={searchOpen} onClose={() => setSearchOpen(false)} onPick={pick} recent={recent} />
     </MotionConfig>
   )

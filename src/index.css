@@ -61,7 +61,7 @@ body {
 .cloud {
   position: absolute;
   border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(255, 255, 255, var(--a, 0.55)), transparent);
+  background: radial-gradient(closest-side, rgba(var(--c, 255, 255, 255), var(--a, 0.55)), transparent);
   filter: blur(18px);
   animation: drift var(--d, 90s) linear infinite;
   animation-delay: var(--delay, 0s);
@@ -93,15 +93,39 @@ body {
   50% { transform: scale(1.08); opacity: 1; }
 }
 
-.flash {
-  animation: flash 7s infinite;
+.sun-rays {
+  animation: spin 120s linear infinite;
 }
-@keyframes flash {
-  0%, 88%, 92%, 100% { opacity: 0; }
-  89%, 91% { opacity: 0.55; }
-  90% { opacity: 0.15; }
+@keyframes spin {
+  to { rotate: 360deg; }
+}
+
+/* A streak that crosses now and then */
+.shooting-star {
+  position: absolute;
+  width: 140px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.95), transparent);
+  transform: rotate(-25deg);
+  transform-origin: left center;
+  opacity: 0;
+  animation: shoot 16s ease-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+@keyframes shoot {
+  0%, 92% { opacity: 0; translate: 0 0; }
+  93% { opacity: 1; }
+  97% { opacity: 0; translate: -260px 120px; }
+  100% { opacity: 0; translate: -260px 120px; }
+}
+
+/* Night dims the panels so the whole screen goes dark */
+.is-night .panel {
+  background: rgba(2, 4, 12, 0.42);
+  border-color: rgba(255, 255, 255, 0.1);
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cloud, .star, .sun-glow, .flash { animation: none; }
+  .cloud, .star, .sun-glow, .sun-rays, .shooting-star { animation: none; }
 }
